@@ -1,0 +1,7 @@
+token = "-10000"
+targetid = "-10000"
+confirmuserid = "-10000"
+botun = "-10000"
+botpass = "-10000"
+dbun = ""
+dbpass = ""
