@@ -6,15 +6,6 @@ import re
 import mariadb
 from config import *
 
-database = mariadb.connect(
-    user=dbusername,
-    password=dbpassword,
-    host = dbhost,
-    port = 3306,
-    database = dbname
-)
-dbCur = database.cursor()
-
 waitingcheck = "https://meta.wikimedia.org/w/api.php?action=query&format=json&prop=revisions&titles=Wikimedian's_Group_of_Mainland_China/New&formatversion=2"
 waitingclist = requests.get(waitingcheck)
 waitinglist = waitingclist.json()
