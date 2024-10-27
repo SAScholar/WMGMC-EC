@@ -3,40 +3,55 @@ import schedule
 import requests
 import json
 import re
-import mariadb
+from pyrogram import Client, filters
 from config import *
+
+app = Client(
+    "ECBot",
+    api_id=api_id, api_hash=api_hash,
+    bot_token=token
+)
 
 waitingcheck = "https://meta.wikimedia.org/w/api.php?action=query&format=json&prop=revisions&titles=Wikimedian's_Group_of_Mainland_China/New&formatversion=2"
 waitingclist = requests.get(waitingcheck)
 waitinglist = waitingclist.json()
-revid = waitinglist["query"]["pages"]["revisions"]["revid"]
+revid = waitinglist["query"]["pages"][0]["revisions"][0]["revid"]
 
 def autocheck() -> bool:
-    if revid != waitinglist["query"]["pages"]["revisions"]["revid"] :
-        revid = waitinglist["query"]["pages"]["revisions"]["revid"]
+    global revid
+    if revid != waitinglist["query"]["pages"][0]["revisions"][0]["revid"] :
+        revid = waitinglist["query"]["pages"][0]["revisions"][0]["revid"]
         return True
     else:
         return False
     
 def getInformations() -> str:
-    username = waitinglist["query"]["pages"]["revisions"]["user"]
-    timestamp = waitinglist["query"]["pages"]["revisions"]["timestamp"]
+    username = waitinglist["query"]["pages"][0]["revisions"][0]["user"]
+    timestamp = waitinglist["query"]["pages"][0]["revisions"][0]["timestamp"]
     return username, timestamp
 
-def writeDB(username, timestamp, pollTime):
-    
+def stopPoll(cid, mid):
+    api = 'https://api.telegram.org/bot{token}/stopPoll'.format(token=token)
+    payload = {
+        'chat_id': cid,
+        'message_id': mid
+    }
+    sent = requests.get(api, params=payload)
+    return schedule.CancelJob
 
-def sendPoll(username, timestamp):
-    time = time.time()
-    writeDB(username, timestamp, time)
+def sendPoll(username):
     api = "https://api.telegram.org/bot{token}/sendPoll".format(token=token)
+    opt = json.dumps(['Support','Oppose'])
     paras = {
         'chat_id': targetid,
-        'questions': "您是否赞成{username}加入本用户组？".format(username = username),
-        'options': json.dumps(['Support','Oppose']),
+        'question': "您是否赞成{username}加入本用户组？".format(username = username),
+        'options': opt,
         'is_anonymous': False
     }
     sentPoll = requests.get(api, params=paras)
+    informations = sentPoll.json()
+    print(informations)
+    schedule.every(3).days.do(stopPoll(informations["result"]["chat"]["id"], informations["result"]["poll"]["id"]))
 
 def approve(username, invitelink):
     session = requests.Session()
@@ -90,60 +105,33 @@ def approve(username, invitelink):
         "formatversion": "2"
     }
 
-def requestApprove():
-    gapi = 'https://api.telegram.org/bot{token}/getUpdates'.format(token)
-    sapi = 'https://api.telegram.org/bot{token}/sendMessage'.format(token)
-    grantapi = "https://api.telegram.org/bot{token}/createChatInviteLink"
-    toGetUpdates = requests.get(gapi)
-    gettingUpdates = toGetUpdates.json()
-    getUpdates = gettingUpdates["result"]
-    length = (len(getUpdates) - 1)
-    match = re.match("^/auth (.+)$", getUpdates[length]["message"]["text"])
-    if match:
-        if getUpdates[length]["from"]["id"] == confirmuserid:
-            who = match.group(1)
-            paras = {
-                'chat_id' : targetid,
-                'text' : '{username}已被批准加入本用户组！'.format(username=who),
-                'reply_parameters' : {
-                    'message_id' : getUpdates[length]["update_id"]
-                }
-            }
-            messageSent = requests.get(sapi, params=paras)
-            print(messageSent)
-            payload = {
-                'chat_id': targetid,
-                'name': who,
-                'member_limit' : '1'
-            }
-            inviteSent = requests.get(grantapi, params=payload)
-            invitePreLink = inviteSent.json()
-            inviteLink = invitePreLink["invite_link"]
-            approve(who, inviteLink)
-
-def dbReader(ids, type):
-    pass
-    return username
-
-def pollCheck() -> str:
-    
-    return ids
-
-def stopPoll():
-    pass
+@app.on_message(filters.command(["confirm"]))
+def requestApprove(client, message):
+    sapi = 'https://api.telegram.org/bot{token}/sendMessage'.format(token=token)
+    grantapi = "https://api.telegram.org/bot{token}/createChatInviteLink".format(token=token)
+    if str(message.from_user.id) == confirmuserid:
+        it = message.text.split()[1:]
+        who = it[0]
+        client.send_message(chat_id=message.chat.id, text=f'根据投票结果，{who}已被批准加入用户组。')
+        payload = {
+            'chat_id': targetid,
+            'name': who,
+            'member_limit': '1'
+        }
+        inviteSent = requests.get(grantapi, params=payload)
+        invitePreLink = inviteSent.json()
+        inviteLink = invitePreLink.get("invite_link", "")
+        approve(who, inviteLink)
+    else:
+        print("No more command waiting handle")
 
 def main():
     if autocheck() == True:
         sendPoll(getInformations())
     else:
-        if pollCheck():
-            stopPoll(dbReader(pollCheck(), 'pollID'))
-            requestApprove(dbReader(pollCheck(), 'Username'))
-            time.sleep(120)
-        else:
-            print("No more work")
-            time.sleep(120)
+        app.run()
+        schedule.run_pending()
+        time.sleep(10)
 
-
-
-
+while True:
+    main()
