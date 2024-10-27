@@ -104,6 +104,8 @@ def approve(username, invitelink):
         "token": CSRFToken,
         "formatversion": "2"
     }
+    session.post(URL, params=payload)
+    session.post(URL, params=emailPayload)
 
 @app.on_message(filters.command(["confirm"]))
 def requestApprove(client, message):
